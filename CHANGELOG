@@ -1,3 +1,10 @@
+-- 2026.11.22 - V2.5.0
+
+- feat: The damage report as a HUD card (Panorama, hud/panorama/.../damage_hud) instead of the "Statistics" block in chat: on death until the respawn, at round end for 6 seconds
+- feat: "Hud" config section, all optional with code defaults: Enabled (true), Position ("bottom" | "chat"), Mode ("rounds" | "deathmatch": one line about the killer), RoundEndSeconds (6). Enabled false brings the chat block back unchanged
+- fix: ffa-mode now records damage between teammates (the friendly fire check returned before it)
+- upgrade: .NET 10, CounterStrikeSharp.API 1.0.374, PanoramaManager 0.4.3 (ships next to the dll)
+
 -- 2025.02.06 - V2.4.0
 
 - feat: Dynamic player language support with command-based switching (e.g., !lang hu)

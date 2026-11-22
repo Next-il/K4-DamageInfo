@@ -15,5 +15,20 @@
   "phrases.hitgroup.7": "Right Leg",
   "phrases.hitgroup.10": "Gear",
   "phrases.hitgroup._": "Unknown",
-  "phrases.center.html": "<font color=\"#FFA500\">Given Damage</font><br><font color=\"#00BFFF\">{1:D3}</font><font color=\"#FFFFFF\"> | </font><font color=\"#FF0000\">{2:D3}</font><br><font color=\"#FFA500\">{0}</font>"
+  "phrases.center.html": "<font color=\"#FFA500\">Given Damage</font><br><font color=\"#00BFFF\">{1:D3}</font><font color=\"#FFFFFF\"> | </font><font color=\"#FF0000\">{2:D3}</font><br><font color=\"#FFA500\">{0}</font>",
+  "phrases.hud.killedby": "Killed by",
+  "phrases.hud.died": "You died",
+  "phrases.hud.round": "Round {0}",
+  "phrases.hud.yourdamage": "Your damage",
+  "phrases.hud.nodamagetaken": "No damage taken",
+  "phrases.hud.dealt": "Dealt",
+  "phrases.hud.taken": "Taken",
+  "phrases.hud.opponent": "Opponent",
+  "phrases.hud.hp": "HP",
+  "phrases.hud.hit": "{0} hit",
+  "phrases.hud.hits": "{0} hits",
+  "phrases.hud.dm.dealt": "You dealt *{0}* in *{1}*. {2} has *{3} HP* left.",
+  "phrases.hud.dm.dealt.dead": "You dealt *{0}* in *{1}*. {2} is dead too.",
+  "phrases.hud.dm.none": "You dealt no damage. {2} has *{3} HP* left.",
+  "phrases.hud.dm.none.dead": "You dealt no damage. {2} is dead too."
 }

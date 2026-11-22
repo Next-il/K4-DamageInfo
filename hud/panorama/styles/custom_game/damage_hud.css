@@ -1,0 +1,437 @@
+/*
+    damage_hud - K4-DamageInfo's damage card. Include hud_shared.vcss_c first.
+
+    Ported from the approved preview (previews/more, tab "Damage": #dmg, .dmg-*, .dr-*, the compact card).
+    Sizes are 1080p pixels, the same numbers as the preview. This is the owner's "minimal" version: the
+    first layout kept, with the smaller text sizes (not the crammed one-line card he rejected).
+
+    PLACEMENT AND THE SLIDE. The pos- class on the root (SetVariant "pos") decides where the card sits and
+    which edge it comes from: bottom center 132px up, above the spectator bar, sliding up from 56px lower;
+    or over the chat (left 22, bottom 228), sliding in from the left. "show" brings it to zero with a fade
+    and a blur, and it leaves the same way. Every ancestor up to hud-screen is unsized or noclip, so the
+    off-screen start is legal.
+
+    THE CARD'S BOX. Panorama counts padding inside width, so a 100% child with padding fills the card
+    exactly. The card keeps 9px at the sides and every block inside adds 6px, which is the preview's 15px;
+    the rows take their 6px as padding, so the killer row's tint runs 6px past the text on each side, as
+    in the preview (which did it with a -6px margin).
+
+    THE BARS are clip ladders, p0..p20, 5 damage a step out of 100, with a 0.35s clip transition. The
+    plugin leaves them at p0 while the card is away and steps each row up a moment after the card shows,
+    row by row, so they fill in. clip survives the labels next to it being rewritten; width would not
+    (runtime-behaviour.md).
+
+    UNVERIFIED IN GAME, each with a harmless failure:
+      - blur in transition-property: if blur does not animate, the card is simply sharp at once.
+      - min-width on the compact card: without it the one-line card is as wide as its line.
+    Icons are CS2's own (icons/equipment/*, hud/deathnotice/icon_headshot), tinted with wash-color.
+    Nothing new ships in the addon.
+*/
+
+/* ------------------------------------------------------------------ root */
+
+/* Opened once per player and left open; the card carries its own "show". */
+.dmg-root {
+    width: 100%;
+    height: 100%;
+    visibility: collapse;
+}
+.dmg-root.show { visibility: visible; }
+
+/* ------------------------------------------------------------------ the card */
+
+/* Bottom center is the default, so a root without a pos- class still lands somewhere sane. */
+.dmg {
+    horizontal-align: center;
+    vertical-align: bottom;
+    margin-bottom: 132px;
+    width: 470px;
+    flow-children: down;
+    padding: 11px 9px 11px 9px;
+    border-top: 2px solid #e8ebee26;
+    world-blur: gaussian(8.0);
+    background-color: gradient(linear, 0% 0%, 0% 100%, from(#12171ee2), to(#0b0f14ec));
+
+    opacity: 0;
+    blur: gaussian(7.0);
+    transform: translateY(56px);
+    transition-property: opacity, transform, blur;
+    transition-duration: 0.3s, 0.34s, 0.3s;
+    transition-timing-function: ease-out, cubic-bezier( 0.2, 0.8, 0.25, 1.0 ), ease-out;
+}
+/* Entering is quicker than leaving: the transition on the state being entered is the one that plays. */
+.dmg.show {
+    opacity: 1;
+    blur: gaussian(0.0);
+    transform: translateY(0px);
+    transition-duration: 0.18s, 0.22s, 0.18s;
+}
+
+.dmg-root.pos-chat .dmg {
+    horizontal-align: left;
+    margin-left: 22px;
+    margin-bottom: 228px;
+    transform: translateX(-520px);
+}
+.dmg-root.pos-chat .dmg.show { transform: translateX(0px); }
+
+/* Deathmatch: as wide as its line, no totals, no table. */
+.dmg.compact {
+    width: fit-children;
+    min-width: 320px;
+}
+
+/* ------------------------------------------------------------------ head */
+
+.dmg-head {
+    width: 100%;
+    flow-children: right;
+    padding: 0px 6px;
+}
+.dmg.compact .dmg-head { width: fit-children; }
+
+.dmg-who {
+    width: fill-parent-flow(1.0);
+    flow-children: down;
+    vertical-align: bottom;
+}
+.dmg.compact .dmg-who { width: fit-children; }
+
+.dmg-eyebrow {
+    font-family: Stratum2 Mono;
+    font-size: 8.5px;
+    font-weight: bold;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #8b939c;
+}
+.dmg.st-killed .dmg-eyebrow { color: #ff8270; }
+
+.dmg-title {
+    flow-children: right;
+    margin-top: 2px;
+}
+.dmg-name {
+    max-width: 230px;
+    font-family: Stratum2 Medium Condensed;
+    font-size: 19px;
+    font-weight: bold;
+    letter-spacing: 0.3px;
+    line-height: 20px;
+    color: #ffffff;
+    white-space: nowrap;
+    text-overflow: shrink;
+    vertical-align: center;
+}
+
+/* The killer's weapon: one class per weapon, the game's own equipment icons. Collapsed until "on". */
+.dmg-wpn {
+    visibility: collapse;
+    width: 58px;
+    height: 18px;
+    margin-left: 8px;
+    vertical-align: center;
+    background-size: contains;
+    background-position: 50% 50%;
+    background-repeat: no-repeat;
+    /* rasterized at 2x the drawn size so 1440p and 4K stay sharp */
+    background-texture-size: 116px 36px;
+    wash-color: #d7dce1;
+}
+.dmg-wpn.on { visibility: visible; }
+
+.dmg-hs {
+    visibility: collapse;
+    width: 15px;
+    height: 15px;
+    margin-left: 8px;
+    vertical-align: center;
+    background-image: url("s2r://panorama/images/hud/deathnotice/icon_headshot.vsvg");
+    background-size: 100% 100%;
+    background-repeat: no-repeat;
+    background-texture-size: 32px 32px;
+    wash-color: #ff8270;
+}
+.dmg.hs .dmg-hs { visibility: visible; }
+
+/* Dealt / Taken totals, bottom right of the head. */
+.dmg-tot {
+    flow-children: right;
+    vertical-align: bottom;
+    margin-left: 12px;
+    margin-bottom: 1px;
+}
+.dmg-tot-col {
+    flow-children: down;
+    margin-left: 14px;
+}
+.dmg-tot-col:first-child { margin-left: 0px; }
+.dmg-tot-lbl {
+    horizontal-align: right;
+    font-family: Stratum2 Mono;
+    font-size: 8px;
+    font-weight: bold;
+    letter-spacing: 1.4px;
+    text-transform: uppercase;
+    color: #6c747d;
+}
+.dmg-tot-n {
+    horizontal-align: right;
+    font-family: Stratum2 Medium Condensed;
+    font-size: 18px;
+    font-weight: bold;
+    line-height: 18px;
+    margin-top: 3px;
+}
+.dmg-tot-n.give { color: #7fd492; }
+.dmg-tot-n.take { color: #ff8270; }
+
+/* ------------------------------------------------------------------ compact line */
+
+/* "You dealt [54] in [2 hits]. kobi has [46 HP] left." Labels next to labels have no word spaces, so
+   the plugin puts "sp" (a space's width) on every segment that follows a word. */
+.dmg-sub {
+    visibility: collapse;
+    flow-children: right;
+    padding: 0px 6px;
+    margin-top: 5px;
+}
+.dmg-sub-t {
+    font-family: Stratum2 Regular;
+    font-size: 12px;
+    color: #c4c9cf;
+    white-space: nowrap;
+}
+.dmg-sub-t.b {
+    font-weight: bold;
+    color: #ffffff;
+}
+.dmg-sub-t.sp { margin-left: 3px; }
+
+.dmg.compact .dmg-sub { visibility: visible; }
+.dmg.compact .dmg-tot,
+.dmg.compact .dmg-cols,
+.dmg.compact .dmg-rows { visibility: collapse; }
+
+/* ------------------------------------------------------------------ table */
+
+/* Columns: opponent (the rest), dealt 128, taken 128, HP 38, 12 between. */
+.dmg-cols {
+    width: 100%;
+    padding: 0px 6px;
+    margin-top: 10px;
+}
+.dmg-cols-in {
+    width: 100%;
+    flow-children: right;
+    padding-bottom: 5px;
+    border-bottom: 1px solid #ffffff10;
+}
+.dmg-col {
+    font-family: Stratum2 Mono;
+    font-size: 8px;
+    font-weight: bold;
+    letter-spacing: 1.4px;
+    text-transform: uppercase;
+    color: #6c747d;
+}
+.dmg-col.opp { width: fill-parent-flow(1.0); }
+.dmg-col.bar { width: 128px; margin-left: 12px; }
+.dmg-col.hp  { width: 38px;  margin-left: 12px; text-align: right; }
+
+.dmg-rows {
+    width: 100%;
+    flow-children: down;
+}
+
+.dr {
+    width: 100%;
+    height: 26px;
+    margin-top: 3px;
+    padding: 0px 6px;
+    flow-children: right;
+}
+.dr.killer { background-color: #e8543f1a; }
+
+/* "Stratum2 Medium Condensed" at normal weight is the preview's 600. */
+.dr-name {
+    width: fill-parent-flow(1.0);
+    vertical-align: center;
+    font-family: Stratum2 Medium Condensed;
+    font-size: 14px;
+    color: #e8ebee;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.dr-bar {
+    width: 128px;
+    height: 100%;
+    margin-left: 12px;
+    flow-children: right;
+}
+.dr-track {
+    width: fill-parent-flow(1.0);
+    height: 3px;
+    vertical-align: center;
+    background-color: #ffffff12;
+}
+/* Zero by default, so a rebuilt panel starts empty. */
+.dr-fill {
+    width: 100%;
+    height: 100%;
+    clip: rect( 0%, 0%, 100%, 0% );
+    transition-property: clip;
+    transition-duration: 0.35s;
+    transition-timing-function: ease-out;
+}
+.dr-bar.give .dr-fill { background-color: #7fd492; }
+.dr-bar.take .dr-fill { background-color: #ff8270; }
+
+/* The damage that way, then the hits, right-aligned against the track. A long "100 10 hits" runs a few
+   pixels over the end of the track rather than squishing the row, as in the preview. */
+.dr-n {
+    width: 50px;
+    height: 100%;
+    margin-left: 8px;
+    overflow: noclip;
+}
+.dr-nin {
+    flow-children: right;
+    horizontal-align: right;
+    vertical-align: center;
+}
+.dr-nb {
+    font-family: Stratum2 Medium Condensed;
+    font-size: 14px;
+    font-weight: bold;
+    line-height: 16px;
+    color: #ffffff;
+    vertical-align: bottom;
+}
+.dr-ns {
+    font-family: Stratum2 Mono;
+    font-size: 8px;
+    color: #8b939c;
+    margin-left: 4px;
+    margin-bottom: 2px;
+    vertical-align: bottom;
+}
+.dr-n.zero .dr-nb { color: #5c646d; }
+.dr-n.zero .dr-ns { color: #4a5159; }
+
+.dr-hp {
+    width: 38px;
+    margin-left: 12px;
+    vertical-align: center;
+    text-align: right;
+    font-family: Stratum2 Medium Condensed;
+    font-size: 14px;
+    font-weight: bold;
+    color: #e8ebee;
+}
+.dr-hp.dead {
+    font-family: Stratum2 Mono;
+    font-size: 8.5px;
+    letter-spacing: 1px;
+    color: #6c747d;
+}
+
+/* ------------------------------------------------------------------ the bar ladder */
+
+.dr-fill.p0 { clip: rect( 0%, 0%, 100%, 0% ); }
+.dr-fill.p1 { clip: rect( 0%, 5%, 100%, 0% ); }
+.dr-fill.p2 { clip: rect( 0%, 10%, 100%, 0% ); }
+.dr-fill.p3 { clip: rect( 0%, 15%, 100%, 0% ); }
+.dr-fill.p4 { clip: rect( 0%, 20%, 100%, 0% ); }
+.dr-fill.p5 { clip: rect( 0%, 25%, 100%, 0% ); }
+.dr-fill.p6 { clip: rect( 0%, 30%, 100%, 0% ); }
+.dr-fill.p7 { clip: rect( 0%, 35%, 100%, 0% ); }
+.dr-fill.p8 { clip: rect( 0%, 40%, 100%, 0% ); }
+.dr-fill.p9 { clip: rect( 0%, 45%, 100%, 0% ); }
+.dr-fill.p10 { clip: rect( 0%, 50%, 100%, 0% ); }
+.dr-fill.p11 { clip: rect( 0%, 55%, 100%, 0% ); }
+.dr-fill.p12 { clip: rect( 0%, 60%, 100%, 0% ); }
+.dr-fill.p13 { clip: rect( 0%, 65%, 100%, 0% ); }
+.dr-fill.p14 { clip: rect( 0%, 70%, 100%, 0% ); }
+.dr-fill.p15 { clip: rect( 0%, 75%, 100%, 0% ); }
+.dr-fill.p16 { clip: rect( 0%, 80%, 100%, 0% ); }
+.dr-fill.p17 { clip: rect( 0%, 85%, 100%, 0% ); }
+.dr-fill.p18 { clip: rect( 0%, 90%, 100%, 0% ); }
+.dr-fill.p19 { clip: rect( 0%, 95%, 100%, 0% ); }
+.dr-fill.p20 { clip: rect( 0%, 100%, 100%, 0% ); }
+
+/* ------------------------------------------------------------------ weapon art */
+
+/* The names CS2 puts in player_death's "weapon"; DamageHud.cs carries the same list. */
+.dmg-wpn.wpn-ak47                    { background-image: url("s2r://panorama/images/icons/equipment/ak47.vsvg"); }
+.dmg-wpn.wpn-aug                     { background-image: url("s2r://panorama/images/icons/equipment/aug.vsvg"); }
+.dmg-wpn.wpn-awp                     { background-image: url("s2r://panorama/images/icons/equipment/awp.vsvg"); }
+.dmg-wpn.wpn-bizon                   { background-image: url("s2r://panorama/images/icons/equipment/bizon.vsvg"); }
+.dmg-wpn.wpn-cz75a                   { background-image: url("s2r://panorama/images/icons/equipment/cz75a.vsvg"); }
+.dmg-wpn.wpn-deagle                  { background-image: url("s2r://panorama/images/icons/equipment/deagle.vsvg"); }
+.dmg-wpn.wpn-elite                   { background-image: url("s2r://panorama/images/icons/equipment/elite.vsvg"); }
+.dmg-wpn.wpn-famas                   { background-image: url("s2r://panorama/images/icons/equipment/famas.vsvg"); }
+.dmg-wpn.wpn-fiveseven               { background-image: url("s2r://panorama/images/icons/equipment/fiveseven.vsvg"); }
+.dmg-wpn.wpn-g3sg1                   { background-image: url("s2r://panorama/images/icons/equipment/g3sg1.vsvg"); }
+.dmg-wpn.wpn-galilar                 { background-image: url("s2r://panorama/images/icons/equipment/galilar.vsvg"); }
+.dmg-wpn.wpn-glock                   { background-image: url("s2r://panorama/images/icons/equipment/glock.vsvg"); }
+.dmg-wpn.wpn-hkp2000                 { background-image: url("s2r://panorama/images/icons/equipment/hkp2000.vsvg"); }
+.dmg-wpn.wpn-m249                    { background-image: url("s2r://panorama/images/icons/equipment/m249.vsvg"); }
+.dmg-wpn.wpn-m4a1                    { background-image: url("s2r://panorama/images/icons/equipment/m4a1.vsvg"); }
+.dmg-wpn.wpn-m4a1_silencer           { background-image: url("s2r://panorama/images/icons/equipment/m4a1_silencer.vsvg"); }
+.dmg-wpn.wpn-mac10                   { background-image: url("s2r://panorama/images/icons/equipment/mac10.vsvg"); }
+.dmg-wpn.wpn-mag7                    { background-image: url("s2r://panorama/images/icons/equipment/mag7.vsvg"); }
+.dmg-wpn.wpn-mp5sd                   { background-image: url("s2r://panorama/images/icons/equipment/mp5sd.vsvg"); }
+.dmg-wpn.wpn-mp7                     { background-image: url("s2r://panorama/images/icons/equipment/mp7.vsvg"); }
+.dmg-wpn.wpn-mp9                     { background-image: url("s2r://panorama/images/icons/equipment/mp9.vsvg"); }
+.dmg-wpn.wpn-negev                   { background-image: url("s2r://panorama/images/icons/equipment/negev.vsvg"); }
+.dmg-wpn.wpn-nova                    { background-image: url("s2r://panorama/images/icons/equipment/nova.vsvg"); }
+.dmg-wpn.wpn-p250                    { background-image: url("s2r://panorama/images/icons/equipment/p250.vsvg"); }
+.dmg-wpn.wpn-p90                     { background-image: url("s2r://panorama/images/icons/equipment/p90.vsvg"); }
+.dmg-wpn.wpn-revolver                { background-image: url("s2r://panorama/images/icons/equipment/revolver.vsvg"); }
+.dmg-wpn.wpn-sawedoff                { background-image: url("s2r://panorama/images/icons/equipment/sawedoff.vsvg"); }
+.dmg-wpn.wpn-scar20                  { background-image: url("s2r://panorama/images/icons/equipment/scar20.vsvg"); }
+.dmg-wpn.wpn-sg556                   { background-image: url("s2r://panorama/images/icons/equipment/sg556.vsvg"); }
+.dmg-wpn.wpn-ssg08                   { background-image: url("s2r://panorama/images/icons/equipment/ssg08.vsvg"); }
+.dmg-wpn.wpn-taser                   { background-image: url("s2r://panorama/images/icons/equipment/taser.vsvg"); }
+.dmg-wpn.wpn-tec9                    { background-image: url("s2r://panorama/images/icons/equipment/tec9.vsvg"); }
+.dmg-wpn.wpn-ump45                   { background-image: url("s2r://panorama/images/icons/equipment/ump45.vsvg"); }
+.dmg-wpn.wpn-usp_silencer            { background-image: url("s2r://panorama/images/icons/equipment/usp_silencer.vsvg"); }
+.dmg-wpn.wpn-xm1014                  { background-image: url("s2r://panorama/images/icons/equipment/xm1014.vsvg"); }
+.dmg-wpn.wpn-hegrenade               { background-image: url("s2r://panorama/images/icons/equipment/hegrenade.vsvg"); }
+.dmg-wpn.wpn-inferno                 { background-image: url("s2r://panorama/images/icons/equipment/inferno.vsvg"); }
+.dmg-wpn.wpn-molotov                 { background-image: url("s2r://panorama/images/icons/equipment/molotov.vsvg"); }
+.dmg-wpn.wpn-incgrenade              { background-image: url("s2r://panorama/images/icons/equipment/incgrenade.vsvg"); }
+.dmg-wpn.wpn-flashbang               { background-image: url("s2r://panorama/images/icons/equipment/flashbang.vsvg"); }
+.dmg-wpn.wpn-smokegrenade            { background-image: url("s2r://panorama/images/icons/equipment/smokegrenade.vsvg"); }
+.dmg-wpn.wpn-decoy                   { background-image: url("s2r://panorama/images/icons/equipment/decoy.vsvg"); }
+.dmg-wpn.wpn-planted_c4              { background-image: url("s2r://panorama/images/icons/equipment/planted_c4.vsvg"); }
+.dmg-wpn.wpn-knife                   { background-image: url("s2r://panorama/images/icons/equipment/knife.vsvg"); }
+.dmg-wpn.wpn-knife_t                 { background-image: url("s2r://panorama/images/icons/equipment/knife_t.vsvg"); }
+.dmg-wpn.wpn-bayonet                 { background-image: url("s2r://panorama/images/icons/equipment/bayonet.vsvg"); }
+.dmg-wpn.wpn-knife_bowie             { background-image: url("s2r://panorama/images/icons/equipment/knife_bowie.vsvg"); }
+.dmg-wpn.wpn-knife_butterfly         { background-image: url("s2r://panorama/images/icons/equipment/knife_butterfly.vsvg"); }
+.dmg-wpn.wpn-knife_canis             { background-image: url("s2r://panorama/images/icons/equipment/knife_canis.vsvg"); }
+.dmg-wpn.wpn-knife_cord              { background-image: url("s2r://panorama/images/icons/equipment/knife_cord.vsvg"); }
+.dmg-wpn.wpn-knife_css               { background-image: url("s2r://panorama/images/icons/equipment/knife_css.vsvg"); }
+.dmg-wpn.wpn-knife_falchion          { background-image: url("s2r://panorama/images/icons/equipment/knife_falchion.vsvg"); }
+.dmg-wpn.wpn-knife_flip              { background-image: url("s2r://panorama/images/icons/equipment/knife_flip.vsvg"); }
+.dmg-wpn.wpn-knife_gut               { background-image: url("s2r://panorama/images/icons/equipment/knife_gut.vsvg"); }
+.dmg-wpn.wpn-knife_gypsy_jackknife   { background-image: url("s2r://panorama/images/icons/equipment/knife_gypsy_jackknife.vsvg"); }
+.dmg-wpn.wpn-knife_karambit          { background-image: url("s2r://panorama/images/icons/equipment/knife_karambit.vsvg"); }
+.dmg-wpn.wpn-knife_kukri             { background-image: url("s2r://panorama/images/icons/equipment/knife_kukri.vsvg"); }
+.dmg-wpn.wpn-knife_m9_bayonet        { background-image: url("s2r://panorama/images/icons/equipment/knife_m9_bayonet.vsvg"); }
+.dmg-wpn.wpn-knife_outdoor           { background-image: url("s2r://panorama/images/icons/equipment/knife_outdoor.vsvg"); }
+.dmg-wpn.wpn-knife_push              { background-image: url("s2r://panorama/images/icons/equipment/knife_push.vsvg"); }
+.dmg-wpn.wpn-knife_skeleton          { background-image: url("s2r://panorama/images/icons/equipment/knife_skeleton.vsvg"); }
+.dmg-wpn.wpn-knife_stiletto          { background-image: url("s2r://panorama/images/icons/equipment/knife_stiletto.vsvg"); }
+.dmg-wpn.wpn-knife_survival_bowie    { background-image: url("s2r://panorama/images/icons/equipment/knife_survival_bowie.vsvg"); }
+.dmg-wpn.wpn-knife_tactical          { background-image: url("s2r://panorama/images/icons/equipment/knife_tactical.vsvg"); }
+.dmg-wpn.wpn-knife_twinblade         { background-image: url("s2r://panorama/images/icons/equipment/knife_twinblade.vsvg"); }
+.dmg-wpn.wpn-knife_ursus             { background-image: url("s2r://panorama/images/icons/equipment/knife_ursus.vsvg"); }
+.dmg-wpn.wpn-knife_widowmaker        { background-image: url("s2r://panorama/images/icons/equipment/knife_widowmaker.vsvg"); }
+.dmg-wpn.wpn-knifegg                 { background-image: url("s2r://panorama/images/icons/equipment/knifegg.vsvg"); }
+.dmg-wpn.wpn-world                   { background-image: url("s2r://panorama/images/icons/equipment/world.vsvg"); }
+.dmg-wpn.wpn-trigger_hurt            { background-image: url("s2r://panorama/images/icons/equipment/trigger_hurt.vsvg"); }
+.dmg-wpn.wpn-prop_exploding_barrel   { background-image: url("s2r://panorama/images/icons/equipment/prop_exploding_barrel.vsvg"); }

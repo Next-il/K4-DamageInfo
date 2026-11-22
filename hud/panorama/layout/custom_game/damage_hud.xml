@@ -1,0 +1,273 @@
+<root>
+	<styles>
+		<include src="s2r://panorama/styles/custom_game/hud_shared.vcss_c" />
+		<include src="s2r://panorama/styles/custom_game/damage_hud.vcss_c" />
+	</styles>
+
+	<!--
+		Damage HUD - K4-DamageInfo's damage report as one private card, instead of the "Statistics" block in
+		chat (a ruled header, one line per opponent, a ruled footer, 3-7 lines on every death and at round end).
+
+		  dead       "Killed by / kobi [ak47] [hs]", Dealt and Taken totals, then one row per opponent: name,
+		             dealt bar + damage + hits, taken bar + damage + hits, their HP or DEAD. The killer's row
+		             is marked and comes first. Stays until the player respawns.
+		  round end  "Round 14 / Your damage" (or "No damage taken"), the same rows, 6 seconds for players
+		             still alive.
+		  compact    Deathmatch: the same head, no totals and no rows, one line instead:
+		             "You dealt 54 in 2 hits. kobi has 46 HP left."
+
+		NOT INTERACTIVE. hittest false everywhere; the plugin opens it with CaptureInput = false.
+
+		CONTRACT (src/Hud/DamageHud.cs must match)
+		  RootPanelId  = "DamageRoot"   RevealClass = "show"   RowCount = 0
+		  CaptureInput = false          HideHud = None         SharedText = false
+
+		The root is full-screen and carries nothing visible itself; it is opened once per player and stays
+		open. The card has its own "show", and "hidden" (collapse) while it is not in use.
+
+		DIALOG VARIABLES
+		  dmg_eyebrow dmg_title dmg_given dmg_taken
+		  dmg_l_dealt dmg_l_taken dmg_l_opp dmg_l_hp       the labels, localized
+		  dmg_s0 .. dmg_s6                                  the compact line: plain, bold, plain, bold, ...
+		  drN_name drN_g drN_gh drN_t drN_th drN_hp         row N (0-7): dealt, dealt hits, taken, taken hits
+
+		CLASSES THE SERVER TOGGLES
+		  DamageRoot   pos-bottom | pos-chat                SetVariant("pos"); no pos-chat = bottom center
+		  dmg_card     show hidden st-killed compact hs
+		  dmg_wpn      on + wpn-<name>                      the killer's weapon (one of the wpn- classes)
+		  dmg_sN       hidden sp                            an empty segment / a word space before it
+		  drN          hidden killer
+		  drN_gf drN_tf  p0..p20                            the dealt and taken bars, 5 damage a step (a clip)
+		  drN_gn drN_tn  zero                               no damage that way: the number goes dim
+		  drN_hp       dead
+	-->
+	<Panel class="hud-screen" hittest="false">
+		<Panel id="DamageRoot" class="dmg-root" hittest="false">
+
+			<Panel id="dmg_card" class="dmg hidden" hittest="false">
+
+				<Panel class="dmg-head" hittest="false">
+					<Panel class="dmg-who" hittest="false">
+						<Label class="dmg-eyebrow" hittest="false" text="{s:dmg_eyebrow}" />
+						<Panel class="dmg-title" hittest="false">
+							<Label class="dmg-name" hittest="false" text="{s:dmg_title}" />
+							<Panel id="dmg_wpn" class="dmg-wpn" hittest="false" />
+							<Panel class="dmg-hs" hittest="false" />
+						</Panel>
+					</Panel>
+					<Panel class="dmg-tot" hittest="false">
+						<Panel class="dmg-tot-col" hittest="false">
+							<Label class="dmg-tot-lbl" hittest="false" text="{s:dmg_l_dealt}" />
+							<Label class="dmg-tot-n give" hittest="false" text="{s:dmg_given}" />
+						</Panel>
+						<Panel class="dmg-tot-col" hittest="false">
+							<Label class="dmg-tot-lbl" hittest="false" text="{s:dmg_l_taken}" />
+							<Label class="dmg-tot-n take" hittest="false" text="{s:dmg_taken}" />
+						</Panel>
+					</Panel>
+				</Panel>
+
+				<!-- compact: one line, bold numbers as labels of their own, since a Label has no spans -->
+				<Panel class="dmg-sub" hittest="false">
+					<Label id="dmg_s0" class="dmg-sub-t" hittest="false" text="{s:dmg_s0}" />
+					<Label id="dmg_s1" class="dmg-sub-t b" hittest="false" text="{s:dmg_s1}" />
+					<Label id="dmg_s2" class="dmg-sub-t" hittest="false" text="{s:dmg_s2}" />
+					<Label id="dmg_s3" class="dmg-sub-t b" hittest="false" text="{s:dmg_s3}" />
+					<Label id="dmg_s4" class="dmg-sub-t" hittest="false" text="{s:dmg_s4}" />
+					<Label id="dmg_s5" class="dmg-sub-t b" hittest="false" text="{s:dmg_s5}" />
+					<Label id="dmg_s6" class="dmg-sub-t" hittest="false" text="{s:dmg_s6}" />
+				</Panel>
+
+				<Panel class="dmg-cols" hittest="false">
+					<Panel class="dmg-cols-in" hittest="false">
+						<Label class="dmg-col opp" hittest="false" text="{s:dmg_l_opp}" />
+						<Label class="dmg-col bar" hittest="false" text="{s:dmg_l_dealt}" />
+						<Label class="dmg-col bar" hittest="false" text="{s:dmg_l_taken}" />
+						<Label class="dmg-col hp" hittest="false" text="{s:dmg_l_hp}" />
+					</Panel>
+				</Panel>
+
+				<Panel class="dmg-rows" hittest="false">
+					<Panel id="dr0" class="dr hidden" hittest="false">
+						<Label class="dr-name" hittest="false" text="{s:dr0_name}" />
+						<Panel class="dr-bar give" hittest="false">
+							<Panel class="dr-track" hittest="false"><Panel id="dr0_gf" class="dr-fill" hittest="false" /></Panel>
+							<Panel id="dr0_gn" class="dr-n" hittest="false">
+								<Panel class="dr-nin" hittest="false">
+									<Label class="dr-nb" hittest="false" text="{s:dr0_g}" />
+									<Label class="dr-ns" hittest="false" text="{s:dr0_gh}" />
+								</Panel>
+							</Panel>
+						</Panel>
+						<Panel class="dr-bar take" hittest="false">
+							<Panel class="dr-track" hittest="false"><Panel id="dr0_tf" class="dr-fill" hittest="false" /></Panel>
+							<Panel id="dr0_tn" class="dr-n" hittest="false">
+								<Panel class="dr-nin" hittest="false">
+									<Label class="dr-nb" hittest="false" text="{s:dr0_t}" />
+									<Label class="dr-ns" hittest="false" text="{s:dr0_th}" />
+								</Panel>
+							</Panel>
+						</Panel>
+						<Label id="dr0_hp" class="dr-hp" hittest="false" text="{s:dr0_hp}" />
+					</Panel>
+					<Panel id="dr1" class="dr hidden" hittest="false">
+						<Label class="dr-name" hittest="false" text="{s:dr1_name}" />
+						<Panel class="dr-bar give" hittest="false">
+							<Panel class="dr-track" hittest="false"><Panel id="dr1_gf" class="dr-fill" hittest="false" /></Panel>
+							<Panel id="dr1_gn" class="dr-n" hittest="false">
+								<Panel class="dr-nin" hittest="false">
+									<Label class="dr-nb" hittest="false" text="{s:dr1_g}" />
+									<Label class="dr-ns" hittest="false" text="{s:dr1_gh}" />
+								</Panel>
+							</Panel>
+						</Panel>
+						<Panel class="dr-bar take" hittest="false">
+							<Panel class="dr-track" hittest="false"><Panel id="dr1_tf" class="dr-fill" hittest="false" /></Panel>
+							<Panel id="dr1_tn" class="dr-n" hittest="false">
+								<Panel class="dr-nin" hittest="false">
+									<Label class="dr-nb" hittest="false" text="{s:dr1_t}" />
+									<Label class="dr-ns" hittest="false" text="{s:dr1_th}" />
+								</Panel>
+							</Panel>
+						</Panel>
+						<Label id="dr1_hp" class="dr-hp" hittest="false" text="{s:dr1_hp}" />
+					</Panel>
+					<Panel id="dr2" class="dr hidden" hittest="false">
+						<Label class="dr-name" hittest="false" text="{s:dr2_name}" />
+						<Panel class="dr-bar give" hittest="false">
+							<Panel class="dr-track" hittest="false"><Panel id="dr2_gf" class="dr-fill" hittest="false" /></Panel>
+							<Panel id="dr2_gn" class="dr-n" hittest="false">
+								<Panel class="dr-nin" hittest="false">
+									<Label class="dr-nb" hittest="false" text="{s:dr2_g}" />
+									<Label class="dr-ns" hittest="false" text="{s:dr2_gh}" />
+								</Panel>
+							</Panel>
+						</Panel>
+						<Panel class="dr-bar take" hittest="false">
+							<Panel class="dr-track" hittest="false"><Panel id="dr2_tf" class="dr-fill" hittest="false" /></Panel>
+							<Panel id="dr2_tn" class="dr-n" hittest="false">
+								<Panel class="dr-nin" hittest="false">
+									<Label class="dr-nb" hittest="false" text="{s:dr2_t}" />
+									<Label class="dr-ns" hittest="false" text="{s:dr2_th}" />
+								</Panel>
+							</Panel>
+						</Panel>
+						<Label id="dr2_hp" class="dr-hp" hittest="false" text="{s:dr2_hp}" />
+					</Panel>
+					<Panel id="dr3" class="dr hidden" hittest="false">
+						<Label class="dr-name" hittest="false" text="{s:dr3_name}" />
+						<Panel class="dr-bar give" hittest="false">
+							<Panel class="dr-track" hittest="false"><Panel id="dr3_gf" class="dr-fill" hittest="false" /></Panel>
+							<Panel id="dr3_gn" class="dr-n" hittest="false">
+								<Panel class="dr-nin" hittest="false">
+									<Label class="dr-nb" hittest="false" text="{s:dr3_g}" />
+									<Label class="dr-ns" hittest="false" text="{s:dr3_gh}" />
+								</Panel>
+							</Panel>
+						</Panel>
+						<Panel class="dr-bar take" hittest="false">
+							<Panel class="dr-track" hittest="false"><Panel id="dr3_tf" class="dr-fill" hittest="false" /></Panel>
+							<Panel id="dr3_tn" class="dr-n" hittest="false">
+								<Panel class="dr-nin" hittest="false">
+									<Label class="dr-nb" hittest="false" text="{s:dr3_t}" />
+									<Label class="dr-ns" hittest="false" text="{s:dr3_th}" />
+								</Panel>
+							</Panel>
+						</Panel>
+						<Label id="dr3_hp" class="dr-hp" hittest="false" text="{s:dr3_hp}" />
+					</Panel>
+					<Panel id="dr4" class="dr hidden" hittest="false">
+						<Label class="dr-name" hittest="false" text="{s:dr4_name}" />
+						<Panel class="dr-bar give" hittest="false">
+							<Panel class="dr-track" hittest="false"><Panel id="dr4_gf" class="dr-fill" hittest="false" /></Panel>
+							<Panel id="dr4_gn" class="dr-n" hittest="false">
+								<Panel class="dr-nin" hittest="false">
+									<Label class="dr-nb" hittest="false" text="{s:dr4_g}" />
+									<Label class="dr-ns" hittest="false" text="{s:dr4_gh}" />
+								</Panel>
+							</Panel>
+						</Panel>
+						<Panel class="dr-bar take" hittest="false">
+							<Panel class="dr-track" hittest="false"><Panel id="dr4_tf" class="dr-fill" hittest="false" /></Panel>
+							<Panel id="dr4_tn" class="dr-n" hittest="false">
+								<Panel class="dr-nin" hittest="false">
+									<Label class="dr-nb" hittest="false" text="{s:dr4_t}" />
+									<Label class="dr-ns" hittest="false" text="{s:dr4_th}" />
+								</Panel>
+							</Panel>
+						</Panel>
+						<Label id="dr4_hp" class="dr-hp" hittest="false" text="{s:dr4_hp}" />
+					</Panel>
+					<Panel id="dr5" class="dr hidden" hittest="false">
+						<Label class="dr-name" hittest="false" text="{s:dr5_name}" />
+						<Panel class="dr-bar give" hittest="false">
+							<Panel class="dr-track" hittest="false"><Panel id="dr5_gf" class="dr-fill" hittest="false" /></Panel>
+							<Panel id="dr5_gn" class="dr-n" hittest="false">
+								<Panel class="dr-nin" hittest="false">
+									<Label class="dr-nb" hittest="false" text="{s:dr5_g}" />
+									<Label class="dr-ns" hittest="false" text="{s:dr5_gh}" />
+								</Panel>
+							</Panel>
+						</Panel>
+						<Panel class="dr-bar take" hittest="false">
+							<Panel class="dr-track" hittest="false"><Panel id="dr5_tf" class="dr-fill" hittest="false" /></Panel>
+							<Panel id="dr5_tn" class="dr-n" hittest="false">
+								<Panel class="dr-nin" hittest="false">
+									<Label class="dr-nb" hittest="false" text="{s:dr5_t}" />
+									<Label class="dr-ns" hittest="false" text="{s:dr5_th}" />
+								</Panel>
+							</Panel>
+						</Panel>
+						<Label id="dr5_hp" class="dr-hp" hittest="false" text="{s:dr5_hp}" />
+					</Panel>
+					<Panel id="dr6" class="dr hidden" hittest="false">
+						<Label class="dr-name" hittest="false" text="{s:dr6_name}" />
+						<Panel class="dr-bar give" hittest="false">
+							<Panel class="dr-track" hittest="false"><Panel id="dr6_gf" class="dr-fill" hittest="false" /></Panel>
+							<Panel id="dr6_gn" class="dr-n" hittest="false">
+								<Panel class="dr-nin" hittest="false">
+									<Label class="dr-nb" hittest="false" text="{s:dr6_g}" />
+									<Label class="dr-ns" hittest="false" text="{s:dr6_gh}" />
+								</Panel>
+							</Panel>
+						</Panel>
+						<Panel class="dr-bar take" hittest="false">
+							<Panel class="dr-track" hittest="false"><Panel id="dr6_tf" class="dr-fill" hittest="false" /></Panel>
+							<Panel id="dr6_tn" class="dr-n" hittest="false">
+								<Panel class="dr-nin" hittest="false">
+									<Label class="dr-nb" hittest="false" text="{s:dr6_t}" />
+									<Label class="dr-ns" hittest="false" text="{s:dr6_th}" />
+								</Panel>
+							</Panel>
+						</Panel>
+						<Label id="dr6_hp" class="dr-hp" hittest="false" text="{s:dr6_hp}" />
+					</Panel>
+					<Panel id="dr7" class="dr hidden" hittest="false">
+						<Label class="dr-name" hittest="false" text="{s:dr7_name}" />
+						<Panel class="dr-bar give" hittest="false">
+							<Panel class="dr-track" hittest="false"><Panel id="dr7_gf" class="dr-fill" hittest="false" /></Panel>
+							<Panel id="dr7_gn" class="dr-n" hittest="false">
+								<Panel class="dr-nin" hittest="false">
+									<Label class="dr-nb" hittest="false" text="{s:dr7_g}" />
+									<Label class="dr-ns" hittest="false" text="{s:dr7_gh}" />
+								</Panel>
+							</Panel>
+						</Panel>
+						<Panel class="dr-bar take" hittest="false">
+							<Panel class="dr-track" hittest="false"><Panel id="dr7_tf" class="dr-fill" hittest="false" /></Panel>
+							<Panel id="dr7_tn" class="dr-n" hittest="false">
+								<Panel class="dr-nin" hittest="false">
+									<Label class="dr-nb" hittest="false" text="{s:dr7_t}" />
+									<Label class="dr-ns" hittest="false" text="{s:dr7_th}" />
+								</Panel>
+							</Panel>
+						</Panel>
+						<Label id="dr7_hp" class="dr-hp" hittest="false" text="{s:dr7_hp}" />
+					</Panel>
+				</Panel>
+
+			</Panel>
+
+		</Panel>
+	</Panel>
+</root>

@@ -51,15 +51,44 @@ namespace K4ryuuDamageInfo
 			"leave-empty-so-everyone-see-it"
 		];
 
+		// Optional: a config without it gets the defaults (HudConfig). Not written back - CSS only fills
+		// missing keys in memory, so no config file has to change for the card to show.
+		[JsonPropertyName("Hud")]
+		public HudConfig Hud { get; set; } = new();
+
 		[JsonPropertyName("ConfigVersion")]
 		public override int Version { get; set; } = 5;
 	}
 
-	[MinimumApiVersion(300)]
-	public class DamageInfoPlugin : BasePlugin, IPluginConfig<PluginConfig>
+	/// <summary>"Hud" in K4-DamageInfo.json. Every key is optional and has a code default.</summary>
+	public sealed class HudConfig
+	{
+		/// <summary>The damage card instead of the "Statistics" block in chat. False brings the chat lines back unchanged.</summary>
+		[JsonPropertyName("Enabled")]
+		public bool Enabled { get; set; } = true;
+
+		/// <summary>"bottom" (bottom center, above the spectator bar) or "chat" (over the chat, bottom left).</summary>
+		[JsonPropertyName("Position")]
+		public string Position { get; set; } = "bottom";
+
+		/// <summary>
+		/// "rounds" (Retakes, comp, arenas): the full card on death and at round end.
+		/// "deathmatch": on death only, one line about the killer ("You dealt 54 in 2 hits. kobi has 46 HP left.").
+		/// </summary>
+		[JsonPropertyName("Mode")]
+		public string Mode { get; set; } = "rounds";
+
+		/// <summary>How long players still alive see the round-end card. Dead players keep theirs until they respawn.</summary>
+		[JsonPropertyName("RoundEndSeconds")]
+		public float RoundEndSeconds { get; set; } = 6f;
+	}
+
+	// 374: PanoramaManager 0.4.3's floor (the damage card)
+	[MinimumApiVersion(374)]
+	public partial class DamageInfoPlugin : BasePlugin, IPluginConfig<PluginConfig>
 	{
 		public override string ModuleName => "Damage Informations";
-		public override string ModuleVersion => "2.4.0";
+		public override string ModuleVersion => "2.5.0";
 		public override string ModuleAuthor => "K4ryuu @ KitsuneLab";
 		public required PluginConfig Config { get; set; } = new PluginConfig();
 		public CCSGameRules? GameRules;
@@ -69,6 +98,13 @@ namespace K4ryuuDamageInfo
 		{
 			public bool IsDataShown { get; set; }
 			public int VictimKiller { get; set; } = -1;
+
+			// For the card: who killed this player and how, recorded on every death (VictimKiller keeps its
+			// old meaning for the chat output, where it is only set when the death print is on)
+			public int KillerSlot { get; set; } = -1;
+			public string? KillerWeapon { get; set; }
+			public bool KillerHeadshot { get; set; }
+
 			public string? CenterMessage { get; set; }
 			public Timer? CenterTimer { get; set; }
 			public PlayerDamageInfo DamageInfo { get; } = new PlayerDamageInfo();
@@ -119,6 +155,13 @@ namespace K4ryuuDamageInfo
 			RegisterEventHandler<EventPlayerSpawn>(OnPlayerSpawn);
 			RegisterEventHandler<EventRoundEnd>(OnRoundEnd);
 			RegisterEventHandler<EventRoundStart>(OnRoundStart);
+
+			HudLoad();
+		}
+
+		public override void Unload(bool hotReload)
+		{
+			HudUnload();
 		}
 
 		private PlayerData GetPlayerData(int slot)
@@ -134,7 +177,9 @@ namespace K4ryuuDamageInfo
 
 		private void OnTick()
 		{
-			var players = Utilities.GetPlayers().Where(p => p.IsValid && !p.IsBot && !p.IsHLTV && p.Connected == PlayerConnectedState.PlayerConnected && p.Team > CsTeam.Spectator);
+			_hud?.Tick();
+
+			var players = Utilities.GetPlayers().Where(p => p.IsValid && !p.IsBot && !p.IsHLTV && p.Connected == PlayerConnectedState.Connected && p.Team > CsTeam.Spectator);
 
 			if (!players.Any())
 				return;
@@ -150,6 +195,9 @@ namespace K4ryuuDamageInfo
 
 		private void OnMapStart(string? mapName = null)
 		{
+			_hud?.Clear();
+			_roundNumber = 0;
+
 			AddTimer(1.0f, () =>
 			{
 				GameRules = Utilities.FindAllEntitiesByDesignerName<CCSGameRulesProxy>("cs_gamerules").FirstOrDefault()?.GameRules;
@@ -162,19 +210,33 @@ namespace K4ryuuDamageInfo
 				return HookResult.Continue;
 
 			GetPlayerData(@event.Userid!.Slot).IsDataShown = false;
+
+			// The death card stays until the respawn
+			_hud?.Hide(@event.Userid!);
 			return HookResult.Continue;
 		}
 
 		private HookResult OnPlayerDeath(EventPlayerDeath @event, GameEventInfo info)
 		{
 			var victim = @event.Userid;
-			if (GameRules == null || GameRules.WarmupPeriod || !Config.AllowDeathPrint || !IsValidPlayer(victim) || victim!.Connected == PlayerConnectedState.PlayerDisconnecting)
+			if (GameRules == null || GameRules.WarmupPeriod || !IsValidPlayer(victim) || victim!.Connected == PlayerConnectedState.Disconnecting)
 				return HookResult.Continue;
 
 			var attacker = @event.Attacker;
-			GetPlayerData(victim.Slot).VictimKiller = (attacker != null && IsValidPlayer(attacker)) ? attacker.Slot : -1;
+			int killer = (attacker != null && IsValidPlayer(attacker)) ? attacker.Slot : -1;
+
+			// Recorded before the death-print check, so a round-end card can still name the killer
+			var victimData = GetPlayerData(victim.Slot);
+			victimData.KillerSlot = killer;
+			victimData.KillerWeapon = @event.Weapon;
+			victimData.KillerHeadshot = @event.Headshot;
+
+			if (!Config.AllowDeathPrint)
+				return HookResult.Continue;
+
+			victimData.VictimKiller = killer;
 			if (!victim.IsBot)
-				DisplayDamageInfo(victim);
+				DisplayDamageInfo(victim, roundEnd: false);
 
 			if (Config.NoRoundsMode && GetPlayerData(victim.Slot).DamageInfo != null)
 			{
@@ -193,7 +255,10 @@ namespace K4ryuuDamageInfo
 			if (!IsValidPlayer(victim) || !IsValidPlayer(attacker))
 				return HookResult.Continue;
 
-			if (victim!.TeamNum == attacker!.TeamNum && !Config.ShowFriendlyFire)
+			// ffa-mode makes teammates enemies (the console check below always meant that, but this return
+			// came first and dropped their damage); damage to yourself stays out either way
+			bool sameTeam = victim!.TeamNum == attacker!.TeamNum;
+			if (sameTeam && !Config.ShowFriendlyFire && (!Config.FFAMode || victim.Slot == attacker.Slot))
 				return HookResult.Continue;
 
 			int damageToHealth = @event.DmgHealth;
@@ -263,6 +328,10 @@ namespace K4ryuuDamageInfo
 		private HookResult OnRoundStart(EventRoundStart @event, GameEventInfo info)
 		{
 			_playerData.Clear();
+
+			// The round the card's "Round N" names: the rounds played so far, plus this one
+			_roundNumber = GameRules != null ? GameRules.TotalRoundsPlayed + 1 : 0;
+			_hud?.HideAll();
 			return HookResult.Continue;
 		}
 
@@ -271,18 +340,18 @@ namespace K4ryuuDamageInfo
 			if (!Config.RoundEndSummary)
 				return HookResult.Continue;
 
-			var players = Utilities.GetPlayers().Where(p => IsValidPlayer(p) && !p.IsBot && !p.IsHLTV && p.Connected == PlayerConnectedState.PlayerConnected && p.Team > CsTeam.Spectator).ToList();
+			var players = Utilities.GetPlayers().Where(p => IsValidPlayer(p) && !p.IsBot && !p.IsHLTV && p.Connected == PlayerConnectedState.Connected && p.Team > CsTeam.Spectator).ToList();
 			if (players.Count == 0)
 				return HookResult.Continue;
 
 			foreach (var player in players)
-				DisplayDamageInfo(player);
+				DisplayDamageInfo(player, roundEnd: true);
 
 			_playerData.Clear();
 			return HookResult.Continue;
 		}
 
-		private void DisplayDamageInfo(CCSPlayerController player)
+		private void DisplayDamageInfo(CCSPlayerController player, bool roundEnd)
 		{
 			if (player.IsBot)
 				return;
@@ -290,6 +359,22 @@ namespace K4ryuuDamageInfo
 			var data = GetPlayerData(player.Slot);
 			if (data.IsDataShown)
 				return;
+
+			// The card replaces the chat block below. show-all-damages is a chat-only summary, so it keeps the chat.
+			if (HudOn && !Config.ShowAllDamages)
+			{
+				switch (ShowCard(player, data, roundEnd))
+				{
+					case CardResult.Shown:
+						data.IsDataShown = true;
+						return;
+
+					case CardResult.Nothing:
+						return;
+
+					// CardResult.Failed: the card could not reach this player, so they get the chat lines
+				}
+			}
 
 			if (Config.ShowAllDamages)
 			{
