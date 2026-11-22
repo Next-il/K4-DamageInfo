@@ -50,7 +50,7 @@
     padding: 11px 9px 11px 9px;
     border-top: 2px solid #e8ebee26;
     world-blur: gaussian(8.0);
-    background-color: gradient(linear, 0% 0%, 0% 100%, from(#12171ee2), to(#0b0f14ec));
+    background-color: gradient(linear, 0% 0%, 0% 100%, from(#12171ec6), to(#0b0f14d0));
 
     opacity: 0;
     blur: gaussian(7.0);
