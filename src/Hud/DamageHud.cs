@@ -95,6 +95,9 @@ internal sealed class DamageHud : IDisposable
 		"prop_exploding_barrel",
 	];
 
+	/// <summary>Every wpn- class, for a draw that has to clear whatever the client may still hold.</summary>
+	private static readonly string[] WeaponClasses = Weapons.Select(w => $"wpn-{w}").ToArray();
+
 	private sealed class Viewer
 	{
 		/// <summary>What the viewer should see; null when nothing.</summary>
@@ -126,6 +129,14 @@ internal sealed class DamageHud : IDisposable
 		/// <summary>The wpn- class on dmg_wpn as last written.</summary>
 		public string? WeaponClass;
 
+		/// <summary>
+		/// The client may hold a wpn- class this side no longer knows of: per-viewer classes live on the
+		/// entity and outlast a Restored (respawn, round restart). The next draw turns every other
+		/// weapon class off, or two of them sit on dmg_wpn and the stylesheet's later one wins - a
+		/// knife drawn for a rifle kill (owner report 2026-11-24).
+		/// </summary>
+		public bool WeaponUnknown = true;
+
 		/// <summary>Forgets every class the client may hold: after a rebuild or a fresh open they are gone.</summary>
 		public void ResetClientState()
 		{
@@ -138,6 +149,7 @@ internal sealed class DamageHud : IDisposable
 			Array.Fill(Dealt, -1);
 			Array.Fill(Taken, -1);
 			WeaponClass = null;
+			WeaponUnknown = true;
 		}
 	}
 
@@ -476,7 +488,17 @@ internal sealed class DamageHud : IDisposable
 		Set(player, "dmg_title", card.Title);
 
 		var weapon = card.Weapon is { } w && Weapons.Contains(w) ? $"wpn-{w}" : null;
-		if (viewer.WeaponClass != weapon)
+		if (viewer.WeaponUnknown)
+		{
+			foreach (var cls in WeaponClasses)
+				if (cls != weapon)
+					Cls(player, WeaponId, cls, false);
+			if (weapon != null)
+				Cls(player, WeaponId, weapon, true);
+			viewer.WeaponClass = weapon;
+			viewer.WeaponUnknown = false;
+		}
+		else if (viewer.WeaponClass != weapon)
 		{
 			if (viewer.WeaponClass != null)
 				Cls(player, WeaponId, viewer.WeaponClass, false);
